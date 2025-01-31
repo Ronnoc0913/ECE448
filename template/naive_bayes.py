@@ -15,7 +15,7 @@ You only need (and should) modify code within this file.
 Original staff versions of all other files will be used by the autograder
 so be careful to not modify anything else.
 """
-
+# hello this is connor first new commit
 
 import reader
 import math
