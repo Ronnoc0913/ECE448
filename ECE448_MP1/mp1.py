@@ -11,7 +11,7 @@ from planar_arm import Arm
 #   where uniform_noise is uniformly distributed between -noise and noise
 def create_linear_data(num_samples, slope, intercept, x_range=[-1.0, 1.0], noise=0.1):
     x = np.random.uniform(x_range[0], x_range[1], (num_samples, 1))
-    noise_term = np.random.uniform(-noise, noise, (num_samples, 1))  # Use uniform noise instead of normal
+    noise_term = np.random.uniform(-noise, noise, (num_samples, 1))  # Use uniform noise
     y = slope * x + intercept + noise_term  # Ensures noise stays within range
     return x, y
 
@@ -159,15 +159,12 @@ def ik_loss_with_obstacles(arm : Arm, config, goal, obstacles):
     total_obstacle_loss = 0
     for obstacle in obstacles:
         # find the closest joint to the obstacle 
-        # (technically we should do line-segment to circle distance)
         obstacle_dist = np.min(np.linalg.norm(workspace_config - obstacle[:2], axis=1))
         # if the joint is inside the obstacle, return infinity
         if obstacle_dist < obstacle[2]:
             return np.inf
         # otherwise, compute the harmonic loss
         total_obstacle_loss += 1 / (obstacle_dist - obstacle[2])
-        # we could instead use a quadratic penalty...
-        # total_obstacle_loss += -(obstacle_dist - obstacle[2])**2
     return ee_loss + total_obstacle_loss
 
 # given a configuration, sample nearby points and return them
@@ -187,7 +184,8 @@ def sample_near(num_samples, config, epsilon=0.1):
 # config is a numpy array of shape (num_features,)
 # num_samples is the number of samples to use to estimate the gradient (use sample_near)
 def estimate_ik_gradient(loss, config, num_samples):
-    samples = sample_near(num_samples, config)  # Sample nearby points
+    # Sample nearby points
+    samples = sample_near(num_samples, config)  
     losses = np.array([loss(sample) for sample in samples])  # Compute losses
 
     # Get top 3 highest loss samples
