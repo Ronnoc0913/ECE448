@@ -26,9 +26,25 @@ def initialize(data, dim):
     @return:
     embedding - dict mapping from words (strings) to numpy arrays of dimension=dim.
     '''
-    raise RuntimeError("You need to write this part!")
+    # raise RuntimeError("You need to write this part!")
+    
+    unique_words = list(dict.fromkeys(data)) # preserve the order
+    N = len(unique_words)
+    embedding = {}
+
+    for i, word in enumerate(unique_words):
+        theta = (2 * np.pi * i) / N # uniform spacing on circle
+        vector = np.zeros(dim)
+        vector[0] = np.cos(theta)
+        vector[1] = np.sin(theta)
+        vector[2:] = np.random.normal(0, 1, dim - 2) # gaussian noise for remaining dimensions
+        embedding[word] = vector
+    
     return embedding
 
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+    
 def gradient(embedding, data, t, d, k):
     '''
     Calculate gradient of the skipgram NCE loss with respect to the embedding of data[t]
@@ -43,7 +59,37 @@ def gradient(embedding, data, t, d, k):
     @return:
     g (numpy array) - loss gradients with respect to embedding of data[t]
     '''
-    raise RuntimeError("You need to write this part!")
+    # raise RuntimeError("You need to write this part!")
+
+    target_word = data[t]
+    target_vec = embedding[target_word]
+    vocab = list(embedding.keys())
+    N = len(data)
+
+    context_indices = [t + offset for offset in range (-d, d+1) if offset != 0 and 0 <= t + offset < N]
+    context_words = [data[i] for i in context_indices]
+
+    g = np.zeros_like(target_vec)
+
+    for context_word in context_words:
+        context_vec = embedding[context_word]
+        score = np.dot(target_vec, context_vec)
+        prob = sigmoid(score)
+        g += (prob - 1) * context_vec
+    
+    for _ in range(k):
+        noise_word = np.random.choice(vocab)
+        noise_vec = embedding[noise_word]
+        score = np.dot(target_vec, noise_vec)
+        prob = sigmoid(score)
+        g += prob * noise_vec  # Matched expected formula
+
+    if len(vocab) == 1:
+        z = np.dot(target_vec, target_vec)
+        sigma_z = sigmoid(z)
+        g = 2 * d * (2 * sigma_z - 1) * target_vec
+
+
     return g
            
 def sgd(embedding, data, learning_rate, num_iters, d, k):
@@ -61,7 +107,13 @@ def sgd(embedding, data, learning_rate, num_iters, d, k):
     @return:
     embedding - the updated embeddings
     '''
-    raise RuntimeError("You need to write this part!")
+    # raise RuntimeError("You need to write this part!")
+
+    for _ in range (num_iters):
+        t = np.random.randint(len(data))
+        grad = gradient(embedding, data, t, d, k)
+        embedding[data[t]] -= learning_rate * grad
+
     return embedding
     
 
