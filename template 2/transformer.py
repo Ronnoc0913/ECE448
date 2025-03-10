@@ -17,22 +17,7 @@ def softmax(logits):
     probs - probs[i,j] = exp(logits[i,j])/sum(exp(logits[i,:])), but 
       be careful to normalize so that you avoid overflow errors!
     '''
-    is_1d = False
-    if len(logits.shape) == 1:
-        logits = logits[np.newaxis, :]
-        is_1d = True
-
-    row_maxes = np.max(logits, axis=1, keepdims=True)  # shape: (N, 1)
-    shifted = logits - row_maxes
-    exp_vals = np.exp(shifted)
-    sums = np.sum(exp_vals, axis=1, keepdims=True)     # shape: (N, 1)
-    probs = exp_vals / sums                            # shape: (N, V)
-
-    # If input was 1D, squeeze back to 1D
-    if is_1d:
-        return probs[0]
-    else:
-        return probs
+    raise RuntimeError("You need to write this part!")
 
 def forward(XK, XQ, WK, WO, WQ, WV):
     '''
@@ -54,28 +39,8 @@ def forward(XK, XQ, WK, WO, WQ, WV):
     Q - 2-by-d array, query vectors computed from XQ
     V - (T-2)-by-d array, value vectors computed from XK
     '''
-     # 1) Compute K, Q, V by multiplying embeddings by the parameter matrices
-    K = XK @ WK  # (T-2, d)
-    Q = XQ @ WQ  # (2, d)
-    Vv = XK @ WV # (T-2, d)
-
-    # 2) Compute attention logits = QK^T -> shape = (2, T-2)
-    attn_logits = Q @ K.T
-
-    # 3) Softmax row-wise for attention weights
-    A = softmax(attn_logits)  # shape: (2, T-2)
-
-    # 4) Compute context vectors: C = A @ V
-    #    A: (2, T-2), Vv: (T-2, d) => C: (2, d)
-    C = A @ Vv
-
-    # 5) Compute output logits = C @ WO -> shape (2, V)
-    logits = C @ WO
-
-    # 6) Output probabilities = softmax(logits) row-wise
-    O = softmax(logits)
-
-    return A, C, K, O, Q, Vv
+    raise RuntimeError("You need to write this part!")
+    return A, C, K, O, Q, V
 
 
 def generate(embeddings, vocabulary, WK, WO, WQ, WV):
@@ -97,29 +62,7 @@ def generate(embeddings, vocabulary, WK, WO, WQ, WV):
       vocabulary items indexed by the argmax of the two outputs computed by running
       the transformer with the provided WK, WO, WQ, and WV.
     '''
-    generated = []
-
-    for emb in embeddings:
-        # Split this sentence into XK, XQ, Y via define_task
-        XK, XQ, Y = reader.define_task(emb)   # XK:(T-2)xV, XQ:2xV, Y:2xV
-
-        # The first T-2 words are the 'prompt' words in XK
-        # We'll retrieve them by argmax of each row
-        prompt_ids = np.argmax(XK, axis=1)
-        prompt_words = [vocabulary[i] for i in prompt_ids]
-
-        # Forward pass to get final 2 outputs
-        A, C, K, O, Q, Vv = forward(XK, XQ, WK, WO, WQ, WV)
-
-        # For each row in O, pick the word with highest probability
-        # O has shape 2 x V
-        out_ids = np.argmax(O, axis=1)  # 2-element array
-        out_words = [vocabulary[i] for i in out_ids]
-
-        # Combine the prompt words and the newly generated last 2 words
-        full_sentence = prompt_words + out_words
-        generated.append(full_sentence)
-
+    raise RuntimeError("You need to write this part!")
     return generated
 
 def cross_entropy_loss(O, Y):
@@ -134,18 +77,7 @@ def cross_entropy_loss(O, Y):
     L - cross-entropy loss, summed over all rows
     dO - NQ-by-V array.  Derivatives of the loss with respect to the elements of O.
     '''
-    import sys
-
-    eps = sys.float_info.min  # small constant to avoid log(0)
-    # O might have zeros, so clip or max with eps to avoid log(0)
-    O_clipped = np.maximum(O, eps)
-
-    # Cross-entropy
-    L = -np.sum(Y * np.log(O_clipped))
-
-    # Derivative w.r.t. O
-    dO = - (Y / O_clipped)  # shape same as O
-
+    raise RuntimeError("You need to write this part!")
     return L, dO
 
 def gradient(XK, XQ, Y, WK, WO, WQ, WV, A, C, K, O, Q, V):
@@ -170,44 +102,9 @@ def gradient(XK, XQ, Y, WK, WO, WQ, WV, A, C, K, O, Q, V):
     dWQ - gradient of cross-entropy with respect to WQ
     dWV - gradient of cross-entropy with respect to WV
     '''
-    # 1) Cross-entropy derivative wrt O
-    L, _ = cross_entropy_loss(O, Y)  # shape (2, V)
-
-    # 2) Simplified derivative of softmax with cross-entropy:
-    # For each row, dlogits = O - Y.
-    dlogits = O - Y
-
-    # 3) Backprop through the output layer (logits = C @ WO)
-    # dC = dlogits @ WO^T and dWO = C^T @ dlogits
-    dC = dlogits @ WO.T  # shape (2, d)
-    dWO = C.T @ dlogits  # shape (d, V)
-
-    # 4) Backprop through the context computation (C = A @ V)
-    dA = dC @ V.T       # shape (2, T-2)
-    dVv = A.T @ dC      # shape (T-2, d)
-
-    # 5) Backprop through the attention softmax.
-    # A = softmax(QK^T). Compute dZ (derivative w.r.t. Z = QK^T)
-    dZ = np.zeros_like(A)  # shape (2, T-2)
-    for i in range(A.shape[0]):  # for each query row
-        row_sum = np.sum(A[i] * dA[i])
-        for j in range(A.shape[1]):
-            dZ[i, j] = A[i, j] * (dA[i, j] - row_sum * A[i, j])
-
-    # 6) Backprop through the attention logits Z = QK^T.
-    dQ = dZ @ K            # shape (2, d)
-    dK = dZ.T @ Q          # shape (T-2, d)
-
-    # 7) Backprop through the key computation (K = XK @ WK)
-    dWK = XK.T @ dK        # shape (V, d)
-
-    # 8) Backprop through the query computation (Q = XQ @ WQ)
-    dWQ = XQ.T @ dQ        # shape (V, d)
-
-    # 9) Backprop through the value computation (V = XK @ WV)
-    dWV = XK.T @ dVv       # shape (V, d)
-
-    return dWK, dWO, dWQ, dWV  
+    raise RuntimeError("You need to write this part!")
+    return dWK, dWO, dWQ, dWV
+    
 
 def train(embeddings, WK, WO, WQ, WV, learningrate, num_iters):
     '''
@@ -233,37 +130,6 @@ def train(embeddings, WK, WO, WQ, WV, learningrate, num_iters):
     WQ - what WQ has become after num_iters of training
     WV - what WV has become after num_iters of training
     '''
-    import random
-
-    losses = []
-    N = len(embeddings)  # number of training sentences
-
-    for t in range(num_iters):
-        # pick random sample
-        i = random.randint(0, N-1)
-        emb = embeddings[i]
-
-        # define task
-        XK, XQ, Y = reader.define_task(emb)
-
-        # forward pass
-        A, C, K, O, Q, Vv = forward(XK, XQ, WK, WO, WQ, WV)
-
-        # compute gradient
-        dWK, dWO, dWQ, dWV = gradient(XK, XQ, Y, WK, WO, WQ, WV, A, C, K, O, Q, Vv)
-
-        # cross-entropy loss
-        L, _ = cross_entropy_loss(O, Y)
-        losses.append(L)
-
-        # parameter update
-        WK -= learningrate * dWK
-        WO -= learningrate * dWO
-        WQ -= learningrate * dWQ
-        WV -= learningrate * dWV
-
-        # (optional) print progress every so often
-        # if t % 1000 == 0:
-        #     print(f"Iteration {t}, loss={L:.4f}")
-
+    raise RuntimeError("You need to write this part!")
     return losses, WK, WO, WQ, WV
+
